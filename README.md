@@ -4,7 +4,7 @@ Keycloak user federation extension to connect to database containing users throu
 
 Useful links:
 
-- [original Github repository](https://github.com/kyrcha/keycloak-mysql-user-federation)
+- [reference](https://github.com/kyrcha/keycloak-mysql-user-federation)
 
 - [official Keycloak guide](https://www.keycloak.org/docs/latest/server_development/index.html#_user-storage-spi)
 
