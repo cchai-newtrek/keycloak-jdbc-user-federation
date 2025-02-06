@@ -28,7 +28,7 @@ We should use the SIT Keycloak server. Therefore, below setup steps are just for
 1. Copy all the jars (the artifact and all it's dependency jars) into *KEYCLOAK_HOME/providers* folder. 
 2. Update the keycloak configs in *KEYCLOAK_HOME/conf/keycloak.conf*, such as database config, port, log file path, etc
 3. Check if the Java path is correct in *KEYCLOAK_HOME/bin/kc.bat*
-4. Install the fat custom jar by `bin\kc.bat build`
+4. Install the custom jar (and it's dependency jars) by `bin\kc.bat build`
 5. Run the keycloak by `bin\kc.bat start-dev` (dev) or `bin\kc.bat start`
 
 ---
