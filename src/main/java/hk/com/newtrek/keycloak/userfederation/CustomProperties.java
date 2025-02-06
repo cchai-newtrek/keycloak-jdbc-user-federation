@@ -1,5 +1,7 @@
 package hk.com.newtrek.keycloak.userfederation;
 
+import java.util.Arrays;
+
 public final class CustomProperties {
 	/*
 	 *  Predefined property once defined and saved, the name cannot be changed directly.
@@ -22,90 +24,52 @@ public final class CustomProperties {
 	public static final String CONFIG_CONNECTION_POOL_LEAK_DETECTION_THRESHOLD = "connection-pool-leak-detection-threshold";
 	
 	public enum DBType {
-		MARIADB, MYSQL, SQLSERVER, POSTGRESQL, HSQL, ORACLE
+		MARIADB("jdbc:mariadb:", org.mariadb.jdbc.Driver.class, "SELECT 1")
+		, MYSQL("jdbc:mysql:", com.mysql.cj.jdbc.Driver.class, "SELECT 1")
+		, SQLSERVER("jdbc:sqlserver:", com.microsoft.sqlserver.jdbc.SQLServerDriver.class, "SELECT 1")
+		, POSTGRESQL("jdbc:postgresql:", org.postgresql.Driver.class, "SELECT 1")
+		, HSQL("jdbc:hsqldb:", org.hsqldb.jdbc.JDBCDriver.class, "SELECT 1 FROM INFORMATION_SCHEMA.SYSTEM_USERS")
+		, ORACLE("jdbc:oracle:", oracle.jdbc.OracleDriver.class, "SELECT 1 FROM DUAL")
 		
 		/**
-		 * China DBMS
+		 * China DBMS to be verified
 		 */
-		, GAUSSDB, OPENGAUSS, OCEANBASE;
-	}
-	
-	public static final class DBInfo {
-		private DBType dbType;
-		private String jdbcDriver;
+//		, GAUSSDB("jdbc:gaussdb:", com.huawei.gaussdb.jdbc.Driver.class, "SELECT 1 FROM DUAL")
+//		, OPENGAUSS("jdbc:opengauss:", com.huawei.opengauss.jdbc.Driver.class, "SELECT 1 FROM DUAL")
+//		, OCEANBASE("jdbc:oceanbase:", com.alipay.oceanbase.jdbc.Driver, "SELECT 1")
+		;
+		
+		private DBType(final String jdbcUrlPrefix, final Class<?> jdbcDriver, final String testSql) {
+			this.jdbcUrlPrefix = jdbcUrlPrefix;
+			this.jdbcDriver = jdbcDriver;
+			this.testSql = testSql;
+		}
+
+		private String jdbcUrlPrefix;
+		private Class<?> jdbcDriver;
 		private String testSql;
 		
-		public DBInfo(final String jdbcUrl) {
-			if(jdbcUrl == null) {
-				throw new NullPointerException("jdbcUrl is null");
-			}
-			
-			String lowerJdbcUrl = jdbcUrl.trim().toLowerCase();
-			
-			if (lowerJdbcUrl.startsWith("jdbc:mariadb:")) {
-				//MariaDB
-				this.dbType = DBType.MARIADB;
-				this.jdbcDriver = "org.mariadb.jdbc.Driver";
-				this.testSql = "SELECT 1";
-			} else if (lowerJdbcUrl.startsWith("jdbc:mysql:")) {
-				//MySQL
-				this.dbType = DBType.MYSQL;
-				this.jdbcDriver = "com.mysql.cj.jdbc.Driver";
-				this.testSql = "SELECT 1";
-			} else if (lowerJdbcUrl.startsWith("jdbc:sqlserver:")) {
-				//SQL Server
-				this.dbType = DBType.SQLSERVER;
-				this.jdbcDriver = "com.microsoft.sqlserver.jdbc.SQLServerDriver";
-				this.testSql = "SELECT 1";
-			} else if (lowerJdbcUrl.startsWith("jdbc:postgresql:")) {
-				//Postgresql
-				this.dbType = DBType.POSTGRESQL;
-				this.jdbcDriver = "org.postgresql.Driver";
-				this.testSql = "SELECT 1";
-			} else if (lowerJdbcUrl.startsWith("jdbc:hsqldb:")) {
-				//hsql
-				this.dbType = DBType.HSQL;
-				this.jdbcDriver = "org.hsqldb.jdbc.JDBCDriver";
-				this.testSql = "SELECT 1 FROM INFORMATION_SCHEMA.SYSTEM_USERS";
-			} else if (lowerJdbcUrl.startsWith("jdbc:oracle:")) {
-				//Oracle (Most likely not to be used in future for government project)
-				this.dbType = DBType.ORACLE;
-				this.jdbcDriver = "oracle.jdbc.OracleDriver";
-				this.testSql = "SELECT 1 FROM DUAL";
-				/**
-				 * to be verified for the China DBMS
-				 */
-//			} else if (lowerJdbcUrl.startsWith("jdbc:gaussdb:")) {
-//				//GaussDB
-//				this.dbType = DBType.GAUSSDB;
-//				this.jdbcDriver = "com.huawei.gaussdb.jdbc.Driver";
-//				this.testSql = "SELECT 1 FROM DUAL";
-//			} else if (lowerJdbcUrl.startsWith("jdbc:opengauss:")) {
-//				//Open GaussDB
-//				this.dbType = DBType.OPENGAUSS;
-//				this.jdbcDriver = "com.huawei.opengauss.jdbc.Driver";
-//				this.testSql = "SELECT 1 FROM DUAL";
-//			} else if (lowerJdbcUrl.startsWith("jdbc:oceanbase:")) {
-//				//OceanBase
-//				this.dbType = DBType.OCEANBASE;
-//				this.jdbcDriver = "com.alipay.oceanbase.jdbc.Driver";
-//				this.testSql = "SELECT 1";
-			} else {
-				throw new IllegalArgumentException("Unsupported jdbcUrl: " + jdbcUrl);
-			}
+		public String getJdbcUrlPrefix() {
+			return jdbcUrlPrefix;
 		}
 
-		public DBType getDbType() {
-			return dbType;
-		}
-
-		public String getJdbcDriver() {
+		public Class<?> getJdbcDriver() {
 			return jdbcDriver;
 		}
 
 		public String getTestSql() {
 			return testSql;
 		}
-		
+
+		public static DBType getDbType(final String jdbcUrl) {
+			if(jdbcUrl == null) throw new NullPointerException("jdbcUrl is null");
+			
+			return Arrays.stream(DBType.values())
+					.filter(dbType -> jdbcUrl.trim().toLowerCase().startsWith(dbType.getJdbcUrlPrefix()))
+					.findFirst()
+					.orElse(null)
+					;
+		}
 	}
+
 }

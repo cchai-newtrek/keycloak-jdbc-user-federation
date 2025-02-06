@@ -1,14 +1,6 @@
 package hk.com.newtrek.keycloak.userfederation;
 
-import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_CONNECTION_POOL_CONNECTION_TIMEOUT;
-import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_CONNECTION_POOL_IDLE_TIMEOUT;
-import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_CONNECTION_POOL_MAX_LIEF_TIME;
-import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_CONNECTION_POOL_MAX_POOL_SIZE;
-import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_CONNECTION_POOL_MIN_IDLE;
-import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_CONNECTION_URL;
-import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_PASSWORD_COL;
-import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_TABLE;
-import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_USERNAME_COL;
+import static hk.com.newtrek.keycloak.userfederation.CustomProperties.*;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -25,11 +17,10 @@ import org.keycloak.provider.ProviderConfigProperty;
 import org.keycloak.provider.ProviderConfigurationBuilder;
 import org.keycloak.storage.UserStorageProviderFactory;
 
-//Import necessary HikariCP classes
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
-import hk.com.newtrek.keycloak.userfederation.CustomProperties.DBInfo;
+import hk.com.newtrek.keycloak.userfederation.CustomProperties.DBType;
 
 public final class JdbcDBUserStorageProviderFactory implements UserStorageProviderFactory<JdbcDBUserStorageProvider> {
 
@@ -90,9 +81,9 @@ public final class JdbcDBUserStorageProviderFactory implements UserStorageProvid
         if (url == null)
             throw new ComponentValidationException("connection URL not present");
           
-    	DBInfo dbInfo = new DBInfo(url);
+        DBType dbType = DBType.getDbType(url);
         try {
-			Class.forName(dbInfo.getJdbcDriver());
+			Class.forName(dbType.getJdbcDriver().getCanonicalName());
 		} catch (Exception e) {
 			 logger.error(e.getMessage());
 		}
@@ -117,12 +108,12 @@ public final class JdbcDBUserStorageProviderFactory implements UserStorageProvid
 
     private void initDataSource(ComponentModel config) {
     	final String jdbcUrl = config.getConfig().getFirst(CONFIG_CONNECTION_URL);
-    	DBInfo dbInfo = new DBInfo(jdbcUrl);
+    	DBType dbType = DBType.getDbType(jdbcUrl);
 
         // HikariCP Configuration
         HikariConfig hikariConfig = new HikariConfig();
         hikariConfig.setJdbcUrl(jdbcUrl);
-        hikariConfig.setDriverClassName(dbInfo.getJdbcDriver());
+        hikariConfig.setDriverClassName(dbType.getJdbcDriver().getCanonicalName());
         
         // Pool Size Tuning (Important!)
         hikariConfig.setMaximumPoolSize(Integer.parseInt(config.getConfig().getFirst(CONFIG_CONNECTION_POOL_MAX_POOL_SIZE)));
@@ -135,7 +126,7 @@ public final class JdbcDBUserStorageProviderFactory implements UserStorageProvid
         // Additional HikariCP settings (optional, but recommended)
         hikariConfig.setPoolName("KeycloakJDBCPool"); // Give your pool a name
         hikariConfig.setAutoCommit(false); // Or false, depending on your needs
-        hikariConfig.setConnectionTestQuery(dbInfo.getTestSql()); // Test connection on borrow
+        hikariConfig.setConnectionTestQuery(dbType.getTestSql()); // Test connection on borrow
 
         try {
             dataSource = new HikariDataSource(hikariConfig);
