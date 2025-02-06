@@ -44,6 +44,10 @@ public final class JdbcDBUserStorageProviderFactory implements UserStorageProvid
 					.defaultValue("username").helpText("Column name that holds the usernames").add()
 				.property().name(CONFIG_PASSWORD_COL).type(ProviderConfigProperty.STRING_TYPE).label("Password Column")
 					.defaultValue("password").helpText("Column name that holds the passwords").add()
+
+				//use connection pool or not
+				.property().name(CONFIG_USE_CONNECTION_POOL).type(ProviderConfigProperty.BOOLEAN_TYPE).label("Use Connection Pool?")
+					.defaultValue(true).helpText("Use connection pool or not? If not will create DB connection every time need access to user database (default is true).").add()
 					
 				//connection pool parameters tuning
 				.property().name(CONFIG_CONNECTION_POOL_MAX_POOL_SIZE).type(ProviderConfigProperty.INTEGER_TYPE).label("Connection Pool Max. Pool Size")
@@ -89,7 +93,10 @@ public final class JdbcDBUserStorageProviderFactory implements UserStorageProvid
 		}
         
         try(Connection conn = DriverManager.getConnection(url)) {
-            conn.isValid(1000);            
+            conn.isValid(1000);
+            //reset the dataSource as the configuration is changed
+            closeDataSource();
+            initDataSource(config);
         } catch (SQLException ex) {
         	logger.error("SQLState: " + ex.getSQLState() + ", VendorError:" + ex.getErrorCode());
         	logger.error("error in validateConfiguration", ex);
@@ -105,8 +112,18 @@ public final class JdbcDBUserStorageProviderFactory implements UserStorageProvid
     	
     	return new JdbcDBUserStorageProvider(session, config, dataSource);
     }
+    
+    private void closeDataSource() {
+        if (dataSource != null) {
+        	logger.info("Closing HikariCP pool:"+dataSource.getPoolName()+" .........");
+            dataSource.close(); // Close the HikariCP pool
+        }
+        
+        dataSource = null;
+    }
 
     private void initDataSource(ComponentModel config) {
+    	
     	final String jdbcUrl = config.getConfig().getFirst(CONFIG_CONNECTION_URL);
     	DBType dbType = DBType.getDbType(jdbcUrl);
 
@@ -139,16 +156,13 @@ public final class JdbcDBUserStorageProviderFactory implements UserStorageProvid
 	@Override
 	public void init(Scope config) {
 		UserStorageProviderFactory.super.init(config);
-		logger.debug("in JdbcDBUserStorageProviderFactory.init() .........");
+		logger.info("in JdbcDBUserStorageProviderFactory.init() .........");
 	}
 
 	@Override
 	public void close() {
 		UserStorageProviderFactory.super.close();
-        if (dataSource != null) {
-        	logger.debug("Closing HikariCP pool .........");
-            dataSource.close(); // Close the HikariCP pool
-        }
+		closeDataSource();
 	}
     
     

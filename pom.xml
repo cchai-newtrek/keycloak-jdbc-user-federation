@@ -23,6 +23,7 @@
 		<hsql.version>2.7.4</hsql.version>
 		<oracle.version>23.6.0.24.10</oracle.version>
 		<hikaricp.version>6.2.1</hikaricp.version>
+		<apache-commons-lang3.version>3.17.0</apache-commons-lang3.version>
 	</properties>
 
 	<dependencies>
@@ -62,6 +63,12 @@
 			<groupId>com.zaxxer</groupId>
 			<artifactId>HikariCP</artifactId>
 			<version>${hikaricp.version}</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-lang3</artifactId>
+			<version>${apache-commons-lang3.version}</version>
 		</dependency>
 
 		<!-- MariaDB -->

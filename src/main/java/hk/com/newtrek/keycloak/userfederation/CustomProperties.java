@@ -13,6 +13,7 @@ public final class CustomProperties {
 	public static final String CONFIG_USERNAME_COL = "username-col";
 	public static final String CONFIG_PASSWORD_COL = "password-col";
 	
+	public static final String CONFIG_USE_CONNECTION_POOL = "use-connection-pool";
 	/*
 	 * connection pool parameters
 	 */

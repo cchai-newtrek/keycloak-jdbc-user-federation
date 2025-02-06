@@ -1,16 +1,15 @@
 package hk.com.newtrek.keycloak.userfederation;
 
-import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_CONNECTION_URL;
-import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_PASSWORD_COL;
-import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_TABLE;
-import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_USERNAME_COL;
+import static hk.com.newtrek.keycloak.userfederation.CustomProperties.*;
 
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Iterator;
 
+import org.apache.commons.lang3.time.StopWatch;
 import org.jboss.logging.Logger;
 import org.keycloak.common.util.MultivaluedHashMap;
 import org.keycloak.component.ComponentModel;
@@ -28,12 +27,13 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 import com.zaxxer.hikari.HikariDataSource;
 
+import hk.com.newtrek.keycloak.userfederation.CustomProperties.DBType;
+
 public final class JdbcDBUserStorageProvider
         implements UserStorageProvider, UserLookupProvider, CredentialInputValidator {
 
     protected KeycloakSession session;
     protected ComponentModel config;
-    protected String url;
     protected BCryptPasswordEncoder bCryptPasswordEncoder;
     protected HikariDataSource dataSource;
     
@@ -43,7 +43,6 @@ public final class JdbcDBUserStorageProvider
         this.session = session;
         this.config = config;
         bCryptPasswordEncoder = new BCryptPasswordEncoder();
-        this.url = config.getConfig().getFirst(CONFIG_CONNECTION_URL);
         this.dataSource = dataSource;
     }
 
@@ -81,8 +80,9 @@ public final class JdbcDBUserStorageProvider
         ResultSet rs = null;
         String query = constructQueryUserSQLStr();
         
+        StopWatch watch = StopWatch.createStarted();
         try(
-        	Connection conn = dataSource.getConnection();
+        	Connection conn = getConnection();
         	PreparedStatement pstmt = conn.prepareStatement(query)) {
         	
             pstmt.setString(1, user.getUsername());
@@ -95,7 +95,8 @@ public final class JdbcDBUserStorageProvider
         } catch (SQLException ex) {
         	logger.error("SQLState: " + ex.getSQLState() + ", VendorError:" + ex.getErrorCode());
         	logger.error("error in isValid", ex);
-        	
+        } catch (Exception e) {
+        	logger.error(e);
         } finally {
             if (rs != null) {
                 try {
@@ -106,6 +107,9 @@ public final class JdbcDBUserStorageProvider
 
                 rs = null;
             }
+            
+        	watch.stop();
+        	logger.debug("JdbcDBUserStorageProvider.isValid used " + watch.getDuration().toNanos() + " nanos.");
         }
 
         if (password == null)
@@ -136,8 +140,9 @@ public final class JdbcDBUserStorageProvider
             }
         }
         
+        StopWatch watch = StopWatch.createStarted();
         try(
-        	Connection conn = dataSource.getConnection();
+        	Connection conn = getConnection();
         	PreparedStatement pstmt = conn.prepareStatement(query)) {
             
         	pstmt.setString(1, username);
@@ -154,7 +159,8 @@ public final class JdbcDBUserStorageProvider
         } catch (SQLException ex) {
         	logger.error("SQLState: " + ex.getSQLState() + ", VendorError:" + ex.getErrorCode());
         	logger.error("error in getUserByUsername", ex);
-        	
+        } catch (Exception e) {
+        	logger.error(e);
         } finally {
             if (rs != null) {
                 try {
@@ -165,10 +171,29 @@ public final class JdbcDBUserStorageProvider
 
                 rs = null;
             }
+            
+        	watch.stop();
+        	logger.debug("JdbcDBUserStorageProvider.getUserByUsername used " + watch.getDuration().toNanos() + " nanos.");
         }
         return adapter;
 	}
 
+	private Connection getConnection() throws ClassNotFoundException, SQLException {
+		final boolean useConnectionPool = Boolean.parseBoolean(config.getConfig().getFirst(CONFIG_USE_CONNECTION_POOL));
+		
+		if(useConnectionPool) {
+			logger.debug("...... use connection pool .......");
+			return dataSource.getConnection();
+		} else {
+			logger.debug("...... NOT using connection pool (use DriverManager.getConnection(url)) .......");
+	        final String url = config.getConfig().getFirst(CONFIG_CONNECTION_URL);
+	        DBType dbType = DBType.getDbType(url);
+	        
+	        Class.forName(dbType.getJdbcDriver().getCanonicalName());
+	        return DriverManager.getConnection(url);
+		}
+	}
+	
 	@Override
 	public UserModel getUserByEmail(RealmModel realm, String email) {
 		return null;
@@ -180,8 +205,6 @@ public final class JdbcDBUserStorageProvider
                 + this.config.getConfig().getFirst(CONFIG_TABLE) + " WHERE "
                 + this.config.getConfig().getFirst(CONFIG_USERNAME_COL) + "=?;";
 	}
-
-
 	
 	@Override
 	public void close() {
