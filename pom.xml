@@ -22,7 +22,7 @@
 		<postgresql.version>42.7.5</postgresql.version>
 		<hsql.version>2.7.4</hsql.version>
 		<oracle.version>23.6.0.24.10</oracle.version>
-		<assembly.version>3.5.0</assembly.version>
+		<hikaricp.version>6.2.1</hikaricp.version>
 	</properties>
 
 	<dependencies>
@@ -56,6 +56,12 @@
 			<artifactId>keycloak-model-storage</artifactId>
 			<version>${keycloak.version}</version>
 			<scope>provided</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>com.zaxxer</groupId>
+			<artifactId>HikariCP</artifactId>
+			<version>${hikaricp.version}</version>
 		</dependency>
 
 		<!-- MariaDB -->

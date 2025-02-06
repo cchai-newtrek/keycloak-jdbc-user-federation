@@ -4,10 +4,8 @@ import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_CON
 import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_PASSWORD_COL;
 import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_TABLE;
 import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_USERNAME_COL;
-import static hk.com.newtrek.keycloak.userfederation.CustomProperties.getJdbcDriver;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -28,6 +26,8 @@ import org.keycloak.storage.adapter.AbstractUserAdapterFederatedStorage;
 import org.keycloak.storage.user.UserLookupProvider;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
+import com.zaxxer.hikari.HikariDataSource;
+
 public final class JdbcDBUserStorageProvider
         implements UserStorageProvider, UserLookupProvider, CredentialInputValidator {
 
@@ -35,14 +35,16 @@ public final class JdbcDBUserStorageProvider
     protected ComponentModel config;
     protected String url;
     protected BCryptPasswordEncoder bCryptPasswordEncoder;
-    		
+    protected HikariDataSource dataSource;
+    
     private static final Logger logger = Logger.getLogger(JdbcDBUserStorageProvider.class);
 
-    public JdbcDBUserStorageProvider(KeycloakSession session, ComponentModel config) {
+    public JdbcDBUserStorageProvider(KeycloakSession session, ComponentModel config, HikariDataSource dataSource) {
         this.session = session;
         this.config = config;
         bCryptPasswordEncoder = new BCryptPasswordEncoder();
         this.url = config.getConfig().getFirst(CONFIG_CONNECTION_URL);
+        this.dataSource = dataSource;
     }
 
     protected UserModel createAdapter(RealmModel realm, String username) {
@@ -78,13 +80,9 @@ public final class JdbcDBUserStorageProvider
         String password = null;
         ResultSet rs = null;
         String query = constructQueryUserSQLStr();
-        try {
-			Class.forName(getJdbcDriver(url));
-		} catch (ClassNotFoundException e) {
-			 logger.error("invalid JDBC driver: " + e.getMessage());
-		}
         
-        try(Connection conn = DriverManager.getConnection(url);
+        try(
+        	Connection conn = dataSource.getConnection();
         	PreparedStatement pstmt = conn.prepareStatement(query)) {
         	
             pstmt.setString(1, user.getUsername());
@@ -103,6 +101,7 @@ public final class JdbcDBUserStorageProvider
                 try {
                     rs.close();
                 } catch (SQLException sqlEx) {
+                	logger.error(sqlEx.getMessage());
                 } // ignore
 
                 rs = null;
@@ -137,13 +136,8 @@ public final class JdbcDBUserStorageProvider
             }
         }
         
-        try {
-			Class.forName(getJdbcDriver(url));
-		} catch (ClassNotFoundException e) {
-			 logger.error("invalid JDBC driver: " + e.getMessage());
-		}
-        
-        try(Connection conn = DriverManager.getConnection(url);
+        try(
+        	Connection conn = dataSource.getConnection();
         	PreparedStatement pstmt = conn.prepareStatement(query)) {
             
         	pstmt.setString(1, username);
@@ -166,6 +160,7 @@ public final class JdbcDBUserStorageProvider
                 try {
                     rs.close();
                 } catch (SQLException sqlEx) {
+                	logger.error(sqlEx.getMessage());
                 } // ignore
 
                 rs = null;
@@ -186,9 +181,11 @@ public final class JdbcDBUserStorageProvider
                 + this.config.getConfig().getFirst(CONFIG_USERNAME_COL) + "=?;";
 	}
 
+
+	
 	@Override
 	public void close() {
-		
+		logger.debug("in JdbcDBUserStorageProvider.close()................");
 	}
 
 }
