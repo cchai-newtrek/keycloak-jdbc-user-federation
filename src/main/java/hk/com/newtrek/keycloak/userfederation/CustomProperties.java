@@ -17,6 +17,7 @@ public final class CustomProperties {
 	/*
 	 * connection pool parameters
 	 */
+	public static final String CONFIG_CONNECTION_POOL_NAME = "connection-pool-name";
 	public static final String CONFIG_CONNECTION_POOL_MAX_POOL_SIZE = "connection-pool-max-pool-size";
 	public static final String CONFIG_CONNECTION_POOL_MIN_IDLE = "connection-pool-min-idle";
 	public static final String CONFIG_CONNECTION_POOL_MAX_LIEF_TIME = "connection-pool-max-life-time";

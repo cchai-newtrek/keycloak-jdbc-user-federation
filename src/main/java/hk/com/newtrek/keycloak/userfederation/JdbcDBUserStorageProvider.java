@@ -80,6 +80,14 @@ public final class JdbcDBUserStorageProvider
         ResultSet rs = null;
         String query = constructQueryUserSQLStr();
         
+        boolean isUserFound = false;
+        final String passwordCol = this.config.getConfig().getFirst(CONFIG_PASSWORD_COL);
+
+        /**
+         * to minimize the operation after open and before the close of the DB connection
+         * so anything not need the DB connection should do before the open of DB connection or after the close of DB connection
+         * as DB connection should be released ASAP, do not do redundant operation in between DB connection, as it will block others to access the DB
+         */
         StopWatch watch = StopWatch.createStarted();
         try(
         	Connection conn = getConnection();
@@ -88,10 +96,9 @@ public final class JdbcDBUserStorageProvider
             pstmt.setString(1, user.getUsername());
             rs = pstmt.executeQuery();
             if (rs.next()) {
-                password = rs.getString(this.config.getConfig().getFirst(CONFIG_PASSWORD_COL));
-                logger.info("found user password with username:" +  user.getUsername());
+                isUserFound = true;
+                password = rs.getString(passwordCol);
             }
-            
         } catch (SQLException ex) {
         	logger.error("SQLState: " + ex.getSQLState() + ", VendorError:" + ex.getErrorCode());
         	logger.error("error in isValid", ex);
@@ -107,15 +114,28 @@ public final class JdbcDBUserStorageProvider
 
                 rs = null;
             }
-            
-        	watch.stop();
-        	logger.debug("JdbcDBUserStorageProvider.isValid used " + watch.getDuration().toNanos() + " nanos.");
         }
+    	watch.stop();
+    	logger.debug("JdbcDBUserStorageProvider.isValid used " + watch.getDuration().toNanos() + " nanos.");
 
-        if (password == null)
+    	if(!isUserFound) {
+	    	logger.warn("!!! Username: " +  user.getUsername() + " not found............");
+	    	return false;
+    	}
+    	
+        if (password == null) {
+        	logger.warn("!!! Username: " +  user.getUsername() + ", the password is null............");
             return false;
-
-        return bCryptPasswordEncoder.matches(input.getChallengeResponse(), password);
+        }
+        
+        final boolean isPasswordMatch = bCryptPasswordEncoder.matches(input.getChallengeResponse(), password);
+        if(isPasswordMatch) {
+            logger.info("Username: " +  user.getUsername() + " login successfully!");
+        } else {
+        	logger.warn("!!! Username: " +  user.getUsername() + ", the password is not matched............");
+        }
+        
+        return isPasswordMatch;
     }
 
 	@Override
@@ -127,55 +147,60 @@ public final class JdbcDBUserStorageProvider
 
 	@Override
 	public UserModel getUserByUsername(RealmModel realm, String username) {
-        ResultSet rs = null;
-        UserModel adapter = null;
-        String query = constructQueryUserSQLStr();
-        
-        if(logger.isDebugEnabled()) {
-        	MultivaluedHashMap<String, String> map = this.config.getConfig();
-            Iterator<String> it = map.keySet().iterator();
-            while(it.hasNext()){
-            	String theKey = (String)it.next();
-            	logger.debug("key:" + theKey + ", value:" + map.getFirst(theKey));
-            }
-        }
-        
-        StopWatch watch = StopWatch.createStarted();
-        try(
-        	Connection conn = getConnection();
-        	PreparedStatement pstmt = conn.prepareStatement(query)) {
-            
-        	pstmt.setString(1, username);
-            rs = pstmt.executeQuery();
-            if (rs.next()) {
-            	 String pword = rs.getString(this.config.getConfig().getFirst(CONFIG_PASSWORD_COL));
-            	 if (pword != null) {
-            		 //String id = rs.getString("ID");
-                     adapter = createAdapter(realm, username);
-                     
-                 }
-            }
-            
-        } catch (SQLException ex) {
-        	logger.error("SQLState: " + ex.getSQLState() + ", VendorError:" + ex.getErrorCode());
-        	logger.error("error in getUserByUsername", ex);
-        } catch (Exception e) {
-        	logger.error(e);
-        } finally {
-            if (rs != null) {
-                try {
-                    rs.close();
-                } catch (SQLException sqlEx) {
-                	logger.error(sqlEx.getMessage());
-                } // ignore
+		ResultSet rs = null;
+		UserModel adapter = null;
+		String query = constructQueryUserSQLStr();
 
-                rs = null;
-            }
-            
-        	watch.stop();
-        	logger.debug("JdbcDBUserStorageProvider.getUserByUsername used " + watch.getDuration().toNanos() + " nanos.");
-        }
-        return adapter;
+		if (logger.isDebugEnabled()) {
+			MultivaluedHashMap<String, String> map = this.config.getConfig();
+			Iterator<String> it = map.keySet().iterator();
+			while (it.hasNext()) {
+				String theKey = (String) it.next();
+				logger.debug("key:" + theKey + ", value:" + map.getFirst(theKey));
+			}
+		}
+
+		final String passwordCol = this.config.getConfig().getFirst(CONFIG_PASSWORD_COL);
+		String pword = null;
+		
+        /**
+         * to minimize the operation after open and before the close of the DB connection 
+         * so anything not need the DB connection should do before the open of DB connection or after the close of DB connection
+         * as DB connection should be released ASAP, do not do redundant operation in between DB connection, as it will block others to access the DB
+         */
+		StopWatch watch = StopWatch.createStarted();
+		try (Connection conn = getConnection();
+			PreparedStatement pstmt = conn.prepareStatement(query)) {
+
+			pstmt.setString(1, username);
+			rs = pstmt.executeQuery();
+			if (rs.next()) {
+				pword = rs.getString(passwordCol);
+			}
+		} catch (SQLException ex) {
+			logger.error("SQLState: " + ex.getSQLState() + ", VendorError:" + ex.getErrorCode());
+			logger.error("error in getUserByUsername", ex);
+		} catch (Exception e) {
+			logger.error(e);
+		} finally {
+			if (rs != null) {
+				try {
+					rs.close();
+				} catch (SQLException sqlEx) {
+					logger.error(sqlEx.getMessage());
+				} // ignore
+
+				rs = null;
+			}
+		}
+		watch.stop();
+		logger.debug("JdbcDBUserStorageProvider.getUserByUsername used " + watch.getDuration().toNanos() + " nanos.");
+
+		if (pword != null) {
+			adapter = createAdapter(realm, username);
+		}
+
+		return adapter;
 	}
 
 	private Connection getConnection() throws ClassNotFoundException, SQLException {

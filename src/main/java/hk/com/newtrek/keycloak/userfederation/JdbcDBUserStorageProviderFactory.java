@@ -50,6 +50,8 @@ public final class JdbcDBUserStorageProviderFactory implements UserStorageProvid
 					.defaultValue(true).helpText("Use connection pool or not? If not will create DB connection every time need access to user database (default is true).").add()
 					
 				//connection pool parameters tuning
+				.property().name(CONFIG_CONNECTION_POOL_NAME).type(ProviderConfigProperty.STRING_TYPE).label("Connection Pool Name")
+					.defaultValue("KeycloakJDBCPool").helpText("Connection pool name").add()
 				.property().name(CONFIG_CONNECTION_POOL_MAX_POOL_SIZE).type(ProviderConfigProperty.INTEGER_TYPE).label("Connection Pool Max. Pool Size")
 					.defaultValue(30).helpText("Connection pool maximum pool size (default 30)").add()
 				.property().name(CONFIG_CONNECTION_POOL_MIN_IDLE).type(ProviderConfigProperty.INTEGER_TYPE).label("Connection Pool Min. Idle Connection")
@@ -141,8 +143,8 @@ public final class JdbcDBUserStorageProviderFactory implements UserStorageProvid
         hikariConfig.setLeakDetectionThreshold(Long.parseLong(config.getConfig().getFirst(CONFIG_CONNECTION_POOL_LEAK_DETECTION_THRESHOLD)));
 
         // Additional HikariCP settings (optional, but recommended)
-        hikariConfig.setPoolName("KeycloakJDBCPool"); // Give your pool a name
-        hikariConfig.setAutoCommit(false); // Or false, depending on your needs
+        hikariConfig.setPoolName(config.getConfig().getFirst(CONFIG_CONNECTION_POOL_NAME)); // Give your pool a name
+        hikariConfig.setAutoCommit(false); // set auto commit to true may not be a good idea
         hikariConfig.setConnectionTestQuery(dbType.getTestSql()); // Test connection on borrow
 
         try {
