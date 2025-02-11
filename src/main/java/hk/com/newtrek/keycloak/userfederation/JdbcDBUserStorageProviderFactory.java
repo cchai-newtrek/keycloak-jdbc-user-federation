@@ -94,15 +94,24 @@ public final class JdbcDBUserStorageProviderFactory implements UserStorageProvid
 			 logger.error(e.getMessage());
 		}
         
+        boolean isValid = false;
         try(Connection conn = DriverManager.getConnection(url)) {
-            conn.isValid(1000);
-            //reset the dataSource as the configuration is changed
-            closeDataSource();
-            initDataSource(config);
+        	//conn.isValid timeout in seconds
+            conn.isValid(10);
+            isValid = true;
         } catch (SQLException ex) {
         	logger.error("SQLState: " + ex.getSQLState() + ", VendorError:" + ex.getErrorCode());
         	logger.error("error in validateConfiguration", ex);
             throw new ComponentValidationException(ex.getMessage());
+		} catch (Exception e) {
+			logger.error(e.getMessage());
+			throw new RuntimeException(e.getMessage());
+        }
+
+        if(isValid) {
+	        //reset the dataSource as the configuration is changed
+	        closeDataSource();
+	        initDataSource(config);
         }
     }
 
