@@ -24,18 +24,18 @@ import hk.com.newtrek.keycloak.userfederation.CustomProperties.DBType;
 
 public final class JdbcDBUserStorageProviderFactory implements UserStorageProviderFactory<JdbcDBUserStorageProvider> {
 
-    private static final Logger logger = Logger.getLogger(JdbcDBUserStorageProviderFactory.class);
+	private static final Logger logger = Logger.getLogger(JdbcDBUserStorageProviderFactory.class);
 
-    protected static final List<ProviderConfigProperty> configMetadata;
+	protected static final List<ProviderConfigProperty> configMetadata;
 
-    public static final String PROVIDER_NAME = "jdbc-users";
+	public static final String PROVIDER_NAME = "jdbc-users";
 
-    
+	
 	public static final String CONFIG_CONNECTION_POOL_LEAK_DETECTION_THRESHOLD = "connection-pool-leak-detection-threshold";
-    
-    
-    static {
-        configMetadata = ProviderConfigurationBuilder.create()
+	
+	
+	static {
+		configMetadata = ProviderConfigurationBuilder.create()
 				.property().name(CONFIG_CONNECTION_URL).type(ProviderConfigProperty.STRING_TYPE).label("JDBC Connection URL")
 					.helpText("JDBC Connection URL (should contain the database login and password)").add()
 				.property().name(CONFIG_TABLE).type(ProviderConfigProperty.STRING_TYPE).label("Table name that storing users")
@@ -65,105 +65,105 @@ public final class JdbcDBUserStorageProviderFactory implements UserStorageProvid
 				.property().name(CONFIG_CONNECTION_POOL_LEAK_DETECTION_THRESHOLD).type(ProviderConfigProperty.INTEGER_TYPE).label("Connection Pool Leak Detection Threshold")
 					.defaultValue(0).helpText("Connection pool leak detection threshold (default 0 ms (by default is disabled, minimum value is 2000 ms)").add()
 				.build();
-    }
+	}
 
-    private HikariDataSource dataSource; // HikariCP connection pool
+	private HikariDataSource dataSource; // HikariCP connection pool
 
-    
-    @Override
-    public List<ProviderConfigProperty> getConfigProperties() {
-        return configMetadata;
-    }
+	
+	@Override
+	public List<ProviderConfigProperty> getConfigProperties() {
+		return configMetadata;
+	}
 
-    @Override
-    public String getId() {
-        return PROVIDER_NAME;
-    }
+	@Override
+	public String getId() {
+		return PROVIDER_NAME;
+	}
 
-    @Override
-    public void validateConfiguration(KeycloakSession session, RealmModel realm, ComponentModel config)
-            throws ComponentValidationException {
-        String url = config.getConfig().getFirst(CONFIG_CONNECTION_URL);
-        if (url == null)
-            throw new ComponentValidationException("connection URL not present");
-          
-        DBType dbType = DBType.getDbType(url);
-        try {
+	@Override
+	public void validateConfiguration(KeycloakSession session, RealmModel realm, ComponentModel config)
+			throws ComponentValidationException {
+		String url = config.getConfig().getFirst(CONFIG_CONNECTION_URL);
+		if (url == null)
+			throw new ComponentValidationException("connection URL not present");
+		  
+		DBType dbType = DBType.getDbType(url);
+		try {
 			Class.forName(dbType.getJdbcDriver().getCanonicalName());
 		} catch (Exception e) {
 			 logger.error(e.getMessage());
 		}
-        
-        boolean isValid = false;
-        try(Connection conn = DriverManager.getConnection(url)) {
-        	//conn.isValid timeout in seconds
-            conn.isValid(10);
-            isValid = true;
-        } catch (SQLException ex) {
-        	logger.error("SQLState: " + ex.getSQLState() + ", VendorError:" + ex.getErrorCode());
-        	logger.error("error in validateConfiguration", ex);
-            throw new ComponentValidationException(ex.getMessage());
+		
+		boolean isValid = false;
+		try(Connection conn = DriverManager.getConnection(url)) {
+			//conn.isValid timeout in seconds
+			conn.isValid(10);
+			isValid = true;
+		} catch (SQLException ex) {
+			logger.error("SQLState: " + ex.getSQLState() + ", VendorError:" + ex.getErrorCode());
+			logger.error("error in validateConfiguration", ex);
+			throw new ComponentValidationException(ex.getMessage());
 		} catch (Exception e) {
 			logger.error(e.getMessage());
 			throw new RuntimeException(e.getMessage());
-        }
+		}
 
-        if(isValid) {
-	        //reset the dataSource as the configuration is changed
-	        closeDataSource();
-	        initDataSource(config);
-        }
-    }
+		if(isValid) {
+			//reset the dataSource as the configuration is changed
+			closeDataSource();
+			initDataSource(config);
+		}
+	}
 
-    @Override
-    public JdbcDBUserStorageProvider create(KeycloakSession session, ComponentModel config) {
-    	if(dataSource == null) {
-    		initDataSource(config);
-    	}
-    	
-    	return new JdbcDBUserStorageProvider(session, config, dataSource);
-    }
-    
-    private void closeDataSource() {
-        if (dataSource != null) {
-        	logger.info("Closing HikariCP pool:"+dataSource.getPoolName()+" .........");
-            dataSource.close(); // Close the HikariCP pool
-        }
-        
-        dataSource = null;
-    }
+	@Override
+	public JdbcDBUserStorageProvider create(KeycloakSession session, ComponentModel config) {
+		if(dataSource == null) {
+			initDataSource(config);
+		}
+		
+		return new JdbcDBUserStorageProvider(session, config, dataSource);
+	}
+	
+	private void closeDataSource() {
+		if (dataSource != null) {
+			logger.info("Closing HikariCP pool:"+dataSource.getPoolName()+" .........");
+			dataSource.close(); // Close the HikariCP pool
+		}
+		
+		dataSource = null;
+	}
 
-    private void initDataSource(ComponentModel config) {
-    	
-    	final String jdbcUrl = config.getConfig().getFirst(CONFIG_CONNECTION_URL);
-    	DBType dbType = DBType.getDbType(jdbcUrl);
+	private void initDataSource(ComponentModel config) {
+		
+		final String jdbcUrl = config.getConfig().getFirst(CONFIG_CONNECTION_URL);
+		DBType dbType = DBType.getDbType(jdbcUrl);
 
-        // HikariCP Configuration
-        HikariConfig hikariConfig = new HikariConfig();
-        hikariConfig.setJdbcUrl(jdbcUrl);
-        hikariConfig.setDriverClassName(dbType.getJdbcDriver().getCanonicalName());
-        
-        // Pool Size Tuning (Important!)
-        hikariConfig.setMaximumPoolSize(Integer.parseInt(config.getConfig().getFirst(CONFIG_CONNECTION_POOL_MAX_POOL_SIZE)));
-        hikariConfig.setMinimumIdle(Integer.parseInt(config.getConfig().getFirst(CONFIG_CONNECTION_POOL_MIN_IDLE)));
-        hikariConfig.setMaxLifetime(Long.parseLong(config.getConfig().getFirst(CONFIG_CONNECTION_POOL_MAX_LIEF_TIME)));
-        hikariConfig.setConnectionTimeout(Long.parseLong(config.getConfig().getFirst(CONFIG_CONNECTION_POOL_CONNECTION_TIMEOUT)));
-        hikariConfig.setIdleTimeout(Long.parseLong(config.getConfig().getFirst(CONFIG_CONNECTION_POOL_IDLE_TIMEOUT)));
-        hikariConfig.setLeakDetectionThreshold(Long.parseLong(config.getConfig().getFirst(CONFIG_CONNECTION_POOL_LEAK_DETECTION_THRESHOLD)));
+		// HikariCP Configuration
+		HikariConfig hikariConfig = new HikariConfig();
+		hikariConfig.setJdbcUrl(jdbcUrl);
+		hikariConfig.setDriverClassName(dbType.getJdbcDriver().getCanonicalName());
+		
+		// Pool Size Tuning (Important!)
+		hikariConfig.setMaximumPoolSize(Integer.parseInt(config.getConfig().getFirst(CONFIG_CONNECTION_POOL_MAX_POOL_SIZE)));
+		hikariConfig.setMinimumIdle(Integer.parseInt(config.getConfig().getFirst(CONFIG_CONNECTION_POOL_MIN_IDLE)));
+		hikariConfig.setMaxLifetime(Long.parseLong(config.getConfig().getFirst(CONFIG_CONNECTION_POOL_MAX_LIEF_TIME)));
+		hikariConfig.setConnectionTimeout(Long.parseLong(config.getConfig().getFirst(CONFIG_CONNECTION_POOL_CONNECTION_TIMEOUT)));
+		hikariConfig.setIdleTimeout(Long.parseLong(config.getConfig().getFirst(CONFIG_CONNECTION_POOL_IDLE_TIMEOUT)));
+		hikariConfig.setLeakDetectionThreshold(Long.parseLong(config.getConfig().getFirst(CONFIG_CONNECTION_POOL_LEAK_DETECTION_THRESHOLD)));
 
-        // Additional HikariCP settings (optional, but recommended)
-        hikariConfig.setPoolName(config.getConfig().getFirst(CONFIG_CONNECTION_POOL_NAME)); // Give your pool a name
-        hikariConfig.setAutoCommit(false); // set auto commit to true may not be a good idea
-        hikariConfig.setConnectionTestQuery(dbType.getTestSql()); // Test connection on borrow
+		// Additional HikariCP settings (optional, but recommended)
+		hikariConfig.setPoolName(config.getConfig().getFirst(CONFIG_CONNECTION_POOL_NAME)); // Give your pool a name
+		hikariConfig.setAutoCommit(false); // set auto commit to true may not be a good idea
+		hikariConfig.setConnectionTestQuery(dbType.getTestSql()); // Test connection on borrow
 
-        try {
-            dataSource = new HikariDataSource(hikariConfig);
-        } catch (Exception e) {
-            logger.error("Error initializing HikariCP data source" + e);
-            throw new RuntimeException("Error initializing JDBC connection pool", e); // Or handle differently
-        }
-    }
-    
+		try {
+			dataSource = new HikariDataSource(hikariConfig);
+		} catch (Exception e) {
+			logger.error("Error initializing HikariCP data source" + e);
+			throw new RuntimeException("Error initializing JDBC connection pool", e); // Or handle differently
+		}
+	}
+	
 	@Override
 	public void init(Scope config) {
 		UserStorageProviderFactory.super.init(config);
@@ -175,7 +175,7 @@ public final class JdbcDBUserStorageProviderFactory implements UserStorageProvid
 		UserStorageProviderFactory.super.close();
 		closeDataSource();
 	}
-    
-    
+	
+	
 
 }

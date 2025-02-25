@@ -30,119 +30,120 @@ import com.zaxxer.hikari.HikariDataSource;
 import hk.com.newtrek.keycloak.userfederation.CustomProperties.DBType;
 
 public final class JdbcDBUserStorageProvider
-        implements UserStorageProvider, UserLookupProvider, CredentialInputValidator {
+		implements UserStorageProvider, UserLookupProvider, CredentialInputValidator {
 
-    protected KeycloakSession session;
-    protected ComponentModel config;
-    protected BCryptPasswordEncoder bCryptPasswordEncoder;
-    protected HikariDataSource dataSource;
-    
-    private static final Logger logger = Logger.getLogger(JdbcDBUserStorageProvider.class);
+	protected KeycloakSession session;
+	protected ComponentModel config;
+	protected BCryptPasswordEncoder bCryptPasswordEncoder;
+	protected HikariDataSource dataSource;
+	
+	private static final Logger logger = Logger.getLogger(JdbcDBUserStorageProvider.class);
 
-    public JdbcDBUserStorageProvider(KeycloakSession session, ComponentModel config, HikariDataSource dataSource) {
-        this.session = session;
-        this.config = config;
-        bCryptPasswordEncoder = new BCryptPasswordEncoder();
-        this.dataSource = dataSource;
-    }
+	public JdbcDBUserStorageProvider(KeycloakSession session, ComponentModel config, HikariDataSource dataSource) {
+		this.session = session;
+		this.config = config;
+		bCryptPasswordEncoder = new BCryptPasswordEncoder();
+		this.dataSource = dataSource;
+	}
 
-    protected UserModel createAdapter(RealmModel realm, String username) {
-        return new AbstractUserAdapterFederatedStorage(session, realm, config) {
-            @Override
-            public String getUsername() {
-                return username;
-            }
+	protected UserModel createAdapter(RealmModel realm, String username) {
+		return new AbstractUserAdapterFederatedStorage(session, realm, config) {
+			@Override
+			public String getUsername() {
+				return username;
+			}
 
 			@Override
 			public void setUsername(String username) {
 				//do nothing
 			}
 
-        };
-    }
-    
-    @Override
-    public boolean isConfiguredFor(RealmModel realm, UserModel user, String credentialType) {
-    	return supportsCredentialType(credentialType);
-    }
+		};
+	}
+	
+	@Override
+	public boolean isConfiguredFor(RealmModel realm, UserModel user, String credentialType) {
+		return supportsCredentialType(credentialType);
+	}
 
-    @Override
-    public boolean supportsCredentialType(String credentialType) {
-        return credentialType.equals(PasswordCredentialModel.TYPE);
-    }
+	@Override
+	public boolean supportsCredentialType(String credentialType) {
+		return credentialType.equals(PasswordCredentialModel.TYPE);
+	}
 
-    @Override
-    public boolean isValid(RealmModel realm, UserModel user, CredentialInput input) {
-        if (!supportsCredentialType(input.getType()))
-            return false;
-        
-        String password = null;
-        ResultSet rs = null;
-        String query = constructQueryUserSQLStr();
-        
-        boolean isUserFound = false;
-        final String passwordCol = this.config.getConfig().getFirst(CONFIG_PASSWORD_COL);
+	@Override
+	public boolean isValid(RealmModel realm, UserModel user, CredentialInput input) {
+		if (!supportsCredentialType(input.getType()))
+			return false;
+		
+		String password = null;
+		ResultSet rs = null;
+		String query = constructQueryUserSQLStr();
+		
+		boolean isUserFound = false;
+		final String passwordCol = this.config.getConfig().getFirst(CONFIG_PASSWORD_COL);
 
-        /**
-         * to minimize the operation after open and before the close of the DB connection
-         * so anything not need the DB connection should do before the open of DB connection or after the close of DB connection
-         * as DB connection should be released ASAP, do not do redundant operation in between DB connection, as it will block others to access the DB
-         */
-        StopWatch watch = StopWatch.createStarted();
-        try(
-        	Connection conn = getConnection();
-        	PreparedStatement pstmt = conn.prepareStatement(query)) {
-        	
-            pstmt.setString(1, user.getUsername());
-            rs = pstmt.executeQuery();
-            if (rs.next()) {
-                isUserFound = true;
-                password = rs.getString(passwordCol);
-            }
-        } catch (SQLException ex) {
-        	logger.error("SQLState: " + ex.getSQLState() + ", VendorError:" + ex.getErrorCode());
-        	logger.error("error in isValid", ex);
-        } catch (Exception e) {
-        	logger.error(e);
-        } finally {
-            if (rs != null) {
-                try {
-                    rs.close();
-                } catch (SQLException sqlEx) {
-                	logger.error(sqlEx.getMessage());
-                } // ignore
+		/**
+		 * to minimize the operation after open and before the close of the DB connection
+		 * so anything not need the DB connection should do before the open of DB connection or after the close of DB connection
+		 * as DB connection should be released ASAP, do not do redundant operation in between DB connection, as it will block others to access the DB
+		 */
+		StopWatch watch = StopWatch.createStarted();
+		try(
+			Connection conn = getConnection();
+			PreparedStatement pstmt = conn.prepareStatement(query)
+		) {
+			
+			pstmt.setString(1, user.getUsername());
+			rs = pstmt.executeQuery();
+			if (rs.next()) {
+				isUserFound = true;
+				password = rs.getString(passwordCol);
+			}
+		} catch (SQLException ex) {
+			logger.error("SQLState: " + ex.getSQLState() + ", VendorError:" + ex.getErrorCode());
+			logger.error("error in isValid", ex);
+		} catch (Exception e) {
+			logger.error(e);
+		} finally {
+			if (rs != null) {
+				try {
+					rs.close();
+				} catch (SQLException sqlEx) {
+					logger.error(sqlEx.getMessage());
+				} // ignore
 
-                rs = null;
-            }
-        }
-    	watch.stop();
-    	logger.debug("JdbcDBUserStorageProvider.isValid used " + watch.getDuration().toNanos() + " nanos.");
+				rs = null;
+			}
+		}
+		watch.stop();
+		logger.debug("JdbcDBUserStorageProvider.isValid used " + watch.getDuration().toNanos() + " nanos.");
 
-    	if(!isUserFound) {
-	    	logger.warn("!!! Username: " +  user.getUsername() + " not found............");
-	    	return false;
-    	}
-    	
-        if (password == null) {
-        	logger.warn("!!! Username: " +  user.getUsername() + ", the password is null............");
-            return false;
-        }
-        
-        final boolean isPasswordMatch = bCryptPasswordEncoder.matches(input.getChallengeResponse(), password);
-        if(isPasswordMatch) {
-            logger.info("Username: " +  user.getUsername() + " login successfully!");
-        } else {
-        	logger.warn("!!! Username: " +  user.getUsername() + ", the password is not matched............");
-        }
-        
-        return isPasswordMatch;
-    }
+		if(!isUserFound) {
+			logger.warn("!!! Username: " +  user.getUsername() + " not found............");
+			return false;
+		}
+		
+		if (password == null) {
+			logger.warn("!!! Username: " +  user.getUsername() + ", the password is null............");
+			return false;
+		}
+		
+		final boolean isPasswordMatch = bCryptPasswordEncoder.matches(input.getChallengeResponse(), password);
+		if(isPasswordMatch) {
+			logger.info("Username: " +  user.getUsername() + " login successfully!");
+		} else {
+			logger.warn("!!! Username: " +  user.getUsername() + ", the password is not matched............");
+		}
+		
+		return isPasswordMatch;
+	}
 
 	@Override
 	public UserModel getUserById(RealmModel realm, String id) {
 		StorageId storageId = new StorageId(id);
-        String username = storageId.getExternalId();
-        return getUserByUsername(realm, username);
+		String username = storageId.getExternalId();
+		return getUserByUsername(realm, username);
 	}
 
 	@Override
@@ -163,11 +164,11 @@ public final class JdbcDBUserStorageProvider
 		final String passwordCol = this.config.getConfig().getFirst(CONFIG_PASSWORD_COL);
 		String pword = null;
 		
-        /**
-         * to minimize the operation after open and before the close of the DB connection 
-         * so anything not need the DB connection should do before the open of DB connection or after the close of DB connection
-         * as DB connection should be released ASAP, do not do redundant operation in between DB connection, as it will block others to access the DB
-         */
+		/**
+		 * to minimize the operation after open and before the close of the DB connection 
+		 * so anything not need the DB connection should do before the open of DB connection or after the close of DB connection
+		 * as DB connection should be released ASAP, do not do redundant operation in between DB connection, as it will block others to access the DB
+		 */
 		StopWatch watch = StopWatch.createStarted();
 		try (Connection conn = getConnection();
 			PreparedStatement pstmt = conn.prepareStatement(query)) {
@@ -211,11 +212,11 @@ public final class JdbcDBUserStorageProvider
 			return dataSource.getConnection();
 		} else {
 			logger.debug("...... NOT using connection pool (use DriverManager.getConnection(url)) .......");
-	        final String url = config.getConfig().getFirst(CONFIG_CONNECTION_URL);
-	        DBType dbType = DBType.getDbType(url);
-	        
-	        Class.forName(dbType.getJdbcDriver().getCanonicalName());
-	        return DriverManager.getConnection(url);
+			final String url = config.getConfig().getFirst(CONFIG_CONNECTION_URL);
+			DBType dbType = DBType.getDbType(url);
+			
+			Class.forName(dbType.getJdbcDriver().getCanonicalName());
+			return DriverManager.getConnection(url);
 		}
 	}
 	
@@ -226,9 +227,9 @@ public final class JdbcDBUserStorageProvider
 
 	private String constructQueryUserSQLStr() {
 		return "SELECT ID, " + this.config.getConfig().getFirst(CONFIG_USERNAME_COL) + ", "
-                + this.config.getConfig().getFirst(CONFIG_PASSWORD_COL) + " FROM "
-                + this.config.getConfig().getFirst(CONFIG_TABLE) + " WHERE "
-                + this.config.getConfig().getFirst(CONFIG_USERNAME_COL) + "=?;";
+				+ this.config.getConfig().getFirst(CONFIG_PASSWORD_COL) + " FROM "
+				+ this.config.getConfig().getFirst(CONFIG_TABLE) + " WHERE "
+				+ this.config.getConfig().getFirst(CONFIG_USERNAME_COL) + "=?;";
 	}
 	
 	@Override
