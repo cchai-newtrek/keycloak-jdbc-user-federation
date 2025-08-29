@@ -5,8 +5,11 @@ import static hk.com.newtrek.keycloak.userfederation.CustomProperties.*;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.List;
+import java.util.regex.Pattern;
 
+import org.apache.commons.lang3.StringUtils;
 import org.jboss.logging.Logger;
 import org.keycloak.Config.Scope;
 import org.keycloak.component.ComponentModel;
@@ -33,7 +36,9 @@ public final class JdbcDBUserStorageProviderFactory implements UserStorageProvid
 	
 	public static final String CONFIG_CONNECTION_POOL_LEAK_DETECTION_THRESHOLD = "connection-pool-leak-detection-threshold";
 	
-	
+	// Regular expression for validating table and column names: alphanumeric and underscores only
+	private static final Pattern IDENTIFIER_PATTERN = Pattern.compile("^[a-zA-Z0-9_]+$");
+
 	static {
 		configMetadata = ProviderConfigurationBuilder.create()
 				.property().name(CONFIG_CONNECTION_URL).type(ProviderConfigProperty.STRING_TYPE).label("JDBC Connection URL")
@@ -80,14 +85,58 @@ public final class JdbcDBUserStorageProviderFactory implements UserStorageProvid
 		return PROVIDER_NAME;
 	}
 
+	protected boolean isValidTableNameOrColumnName(final String inValue, final DBType dbType) {
+		if (inValue == null || dbType == null) {
+			return false;
+		}
+		
+		String[] allowedQuotes = dbType.getAllowedQuotes();
+		
+		String value = inValue.trim();
+		
+		if(allowedQuotes != null && allowedQuotes.length > 0) {
+			if(Arrays.stream(allowedQuotes).anyMatch(quote -> inValue.startsWith(quote))) {
+				value = value.substring(1);
+			}
+			
+			if(Arrays.stream(allowedQuotes).anyMatch(quote -> inValue.endsWith(quote))) {
+				value = StringUtils.chop(value);
+			}
+		}
+		
+		return IDENTIFIER_PATTERN.matcher(value).matches();
+	}
+	
 	@Override
 	public void validateConfiguration(KeycloakSession session, RealmModel realm, ComponentModel config)
 			throws ComponentValidationException {
 		String url = config.getConfig().getFirst(CONFIG_CONNECTION_URL);
 		if (url == null)
 			throw new ComponentValidationException("connection URL not present");
-		  
+		
 		DBType dbType = DBType.getDbType(url);
+		
+		//checking for table name and column name values to avoid SQL injection
+		String tableName = StringUtils.defaultString(config.getConfig().getFirst(CONFIG_TABLE)).trim();
+		String usernameCol = StringUtils.defaultString(config.getConfig().getFirst(CONFIG_USERNAME_COL)).trim();
+		String passwordCol = StringUtils.defaultString(config.getConfig().getFirst(CONFIG_PASSWORD_COL)).trim();
+
+		final String tableNameColNameErrMsg = "must contain only letters, numbers, underscores"
+										+ ((dbType.getAllowedQuotes() != null && dbType.getAllowedQuotes().length > 0)?
+											" and DB quotes: " + String.join(",", dbType.getAllowedQuotes()): ""
+										);
+		if (!isValidTableNameOrColumnName(tableName, dbType)) {
+			throw new ComponentValidationException("Invalid table name: " + tableNameColNameErrMsg);
+		}
+		
+		if (!isValidTableNameOrColumnName(usernameCol, dbType)) {
+			throw new ComponentValidationException("Invalid username column name: " + tableNameColNameErrMsg);
+		}
+
+		if (!isValidTableNameOrColumnName(passwordCol, dbType)) {
+			throw new ComponentValidationException("Invalid password column name: " + tableNameColNameErrMsg);
+		}
+		
 		try {
 			Class.forName(dbType.getJdbcDriver().getCanonicalName());
 		} catch (Exception e) {
