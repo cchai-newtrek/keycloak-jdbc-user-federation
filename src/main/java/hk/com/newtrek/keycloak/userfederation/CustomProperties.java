@@ -11,6 +11,7 @@ public final class CustomProperties {
 	public static final String CONFIG_CONNECTION_URL = "connection-url";
 	public static final String CONFIG_TABLE = "table";
 	public static final String CONFIG_USERNAME_COL = "username-col";
+	public static final String CONFIG_SKIP_PASSWORD_CHECKING = "skip-password-checking";
 	public static final String CONFIG_PASSWORD_COL = "password-col";
 	
 	public static final String CONFIG_USE_CONNECTION_POOL = "use-connection-pool";

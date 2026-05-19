@@ -81,7 +81,9 @@ public final class JdbcDBUserStorageProvider
 		String query = constructQueryUserSQLStr();
 		
 		boolean isUserFound = false;
-		final String passwordCol = this.config.getConfig().getFirst(CONFIG_PASSWORD_COL);
+		
+		final boolean skipPasswordChecking = Boolean.parseBoolean(this.config.getConfig().getFirst(CONFIG_SKIP_PASSWORD_CHECKING));
+		final String passwordCol = skipPasswordChecking? null : this.config.getConfig().getFirst(CONFIG_PASSWORD_COL);
 
 		/**
 		 * to minimize the operation after open and before the close of the DB connection
@@ -98,7 +100,9 @@ public final class JdbcDBUserStorageProvider
 			rs = pstmt.executeQuery();
 			if (rs.next()) {
 				isUserFound = true;
-				password = rs.getString(passwordCol);
+				if(!skipPasswordChecking || passwordCol != null) {
+					password = rs.getString(passwordCol);
+				}
 			}
 		} catch (SQLException ex) {
 			logger.error("SQLState: " + ex.getSQLState() + ", VendorError:" + ex.getErrorCode());
@@ -124,12 +128,12 @@ public final class JdbcDBUserStorageProvider
 			return false;
 		}
 		
-		if (password == null) {
+		if (!skipPasswordChecking && password == null) {
 			logger.warn("!!! Username: " +  user.getUsername() + ", the password is null............");
 			return false;
 		}
 		
-		final boolean isPasswordMatch = bCryptPasswordEncoder.matches(input.getChallengeResponse(), password);
+		final boolean isPasswordMatch = skipPasswordChecking? true : bCryptPasswordEncoder.matches(input.getChallengeResponse(), password);
 		if(isPasswordMatch) {
 			logger.info("Username: " +  user.getUsername() + " login successfully!");
 		} else {
@@ -161,7 +165,8 @@ public final class JdbcDBUserStorageProvider
 			}
 		}
 
-		final String passwordCol = this.config.getConfig().getFirst(CONFIG_PASSWORD_COL);
+		final boolean skipPasswordChecking = Boolean.parseBoolean(config.getConfig().getFirst(CONFIG_SKIP_PASSWORD_CHECKING));
+		final String passwordCol = skipPasswordChecking? null : this.config.getConfig().getFirst(CONFIG_PASSWORD_COL);
 		String pword = null;
 		
 		/**
@@ -175,7 +180,7 @@ public final class JdbcDBUserStorageProvider
 
 			pstmt.setString(1, username);
 			rs = pstmt.executeQuery();
-			if (rs.next()) {
+			if (rs.next() && passwordCol != null) {
 				pword = rs.getString(passwordCol);
 			}
 		} catch (SQLException ex) {
@@ -197,7 +202,7 @@ public final class JdbcDBUserStorageProvider
 		watch.stop();
 		logger.debug("JdbcDBUserStorageProvider.getUserByUsername used " + watch.getDuration().toNanos() + " nanos.");
 
-		if (pword != null) {
+		if (skipPasswordChecking || pword != null) {
 			adapter = createAdapter(realm, username);
 		}
 
@@ -226,10 +231,13 @@ public final class JdbcDBUserStorageProvider
 	}
 
 	private String constructQueryUserSQLStr() {
-		return "SELECT ID, " + this.config.getConfig().getFirst(CONFIG_USERNAME_COL) + ", "
-				+ this.config.getConfig().getFirst(CONFIG_PASSWORD_COL) + " FROM "
+		final boolean skipPasswordChecking = Boolean.parseBoolean(config.getConfig().getFirst(CONFIG_SKIP_PASSWORD_CHECKING));
+		return "SELECT ID, " + this.config.getConfig().getFirst(CONFIG_USERNAME_COL)
+				+ (skipPasswordChecking? "" : (", " + this.config.getConfig().getFirst(CONFIG_PASSWORD_COL)))
+				+ " FROM "
 				+ this.config.getConfig().getFirst(CONFIG_TABLE) + " WHERE "
-				+ this.config.getConfig().getFirst(CONFIG_USERNAME_COL) + "=?;";
+				+ this.config.getConfig().getFirst(CONFIG_USERNAME_COL) + "=?;"
+				;
 	}
 	
 	@Override

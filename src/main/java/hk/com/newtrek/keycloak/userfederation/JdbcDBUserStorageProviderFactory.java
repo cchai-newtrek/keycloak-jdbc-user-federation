@@ -47,6 +47,8 @@ public final class JdbcDBUserStorageProviderFactory implements UserStorageProvid
 					.defaultValue("user").helpText("Table where users are stored").add()
 				.property().name(CONFIG_USERNAME_COL).type(ProviderConfigProperty.STRING_TYPE).label("Username Column")
 					.defaultValue("username").helpText("Column name that holds the usernames").add()
+				.property().name(CONFIG_SKIP_PASSWORD_CHECKING).type(ProviderConfigProperty.BOOLEAN_TYPE).label("Skip Password Checking?")
+					.defaultValue(false).helpText("Skip password checking, just for testing or special use case, not recommended for production use.").add()
 				.property().name(CONFIG_PASSWORD_COL).type(ProviderConfigProperty.STRING_TYPE).label("Password Column")
 					.defaultValue("password").helpText("Column name that holds the passwords").add()
 
@@ -119,6 +121,9 @@ public final class JdbcDBUserStorageProviderFactory implements UserStorageProvid
 		//checking for table name and column name values to avoid SQL injection
 		String tableName = StringUtils.defaultString(config.getConfig().getFirst(CONFIG_TABLE)).trim();
 		String usernameCol = StringUtils.defaultString(config.getConfig().getFirst(CONFIG_USERNAME_COL)).trim();
+		
+		final boolean skipPasswordChecking = Boolean.parseBoolean(config.getConfig().getFirst(CONFIG_SKIP_PASSWORD_CHECKING));
+		
 		String passwordCol = StringUtils.defaultString(config.getConfig().getFirst(CONFIG_PASSWORD_COL)).trim();
 
 		final String tableNameColNameErrMsg = "must contain only letters, numbers, underscores"
@@ -133,8 +138,10 @@ public final class JdbcDBUserStorageProviderFactory implements UserStorageProvid
 			throw new ComponentValidationException("Invalid username column name: " + tableNameColNameErrMsg);
 		}
 
-		if (!isValidTableNameOrColumnName(passwordCol, dbType)) {
-			throw new ComponentValidationException("Invalid password column name: " + tableNameColNameErrMsg);
+		if(!skipPasswordChecking || StringUtils.isNotBlank(passwordCol)) {
+			if (!isValidTableNameOrColumnName(passwordCol, dbType)) {
+				throw new ComponentValidationException("Invalid password column name: " + tableNameColNameErrMsg);
+			}
 		}
 		
 		try {
