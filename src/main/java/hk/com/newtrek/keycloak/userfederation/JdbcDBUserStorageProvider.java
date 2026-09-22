@@ -77,8 +77,6 @@ public final class JdbcDBUserStorageProvider
 			return false;
 		
 		String password = null;
-		ResultSet rs = null;
-		String query = constructQueryUserSQLStr();
 		
 		boolean isUserFound = false;
 		
@@ -91,13 +89,10 @@ public final class JdbcDBUserStorageProvider
 		 * as DB connection should be released ASAP, do not do redundant operation in between DB connection, as it will block others to access the DB
 		 */
 		StopWatch watch = StopWatch.createStarted();
-		try(
-			Connection conn = getConnection();
-			PreparedStatement pstmt = conn.prepareStatement(query)
+		try (Connection conn = getConnection();
+				PreparedStatement pStmt = createGetUserStatement(conn, user.getUsername());
+				ResultSet rs = pStmt.executeQuery();
 		) {
-			
-			pstmt.setString(1, user.getUsername());
-			rs = pstmt.executeQuery();
 			if (rs.next()) {
 				isUserFound = true;
 				if(!skipPasswordChecking || passwordCol != null) {
@@ -110,16 +105,8 @@ public final class JdbcDBUserStorageProvider
 		} catch (Exception e) {
 			logger.error(e);
 		} finally {
-			if (rs != null) {
-				try {
-					rs.close();
-				} catch (SQLException sqlEx) {
-					logger.error(sqlEx.getMessage());
-				} // ignore
-
-				rs = null;
-			}
 		}
+		
 		watch.stop();
 		logger.debug("JdbcDBUserStorageProvider.isValid used " + watch.getDuration().toNanos() + " nanos.");
 
@@ -152,10 +139,7 @@ public final class JdbcDBUserStorageProvider
 
 	@Override
 	public UserModel getUserByUsername(RealmModel realm, String username) {
-		ResultSet rs = null;
 		UserModel adapter = null;
-		String query = constructQueryUserSQLStr();
-
 		if (logger.isDebugEnabled()) {
 			MultivaluedHashMap<String, String> map = this.config.getConfig();
 			Iterator<String> it = map.keySet().iterator();
@@ -165,8 +149,6 @@ public final class JdbcDBUserStorageProvider
 			}
 		}
 
-		final boolean skipPasswordChecking = Boolean.parseBoolean(config.getConfig().getFirst(CONFIG_SKIP_PASSWORD_CHECKING));
-		final String passwordCol = skipPasswordChecking? null : this.config.getConfig().getFirst(CONFIG_PASSWORD_COL);
 		String pword = null;
 		
 		/**
@@ -174,12 +156,14 @@ public final class JdbcDBUserStorageProvider
 		 * so anything not need the DB connection should do before the open of DB connection or after the close of DB connection
 		 * as DB connection should be released ASAP, do not do redundant operation in between DB connection, as it will block others to access the DB
 		 */
+		final boolean skipPasswordChecking = Boolean.parseBoolean(config.getConfig().getFirst(CONFIG_SKIP_PASSWORD_CHECKING));
+		final String passwordCol = skipPasswordChecking? null : this.config.getConfig().getFirst(CONFIG_PASSWORD_COL);
+		
 		StopWatch watch = StopWatch.createStarted();
 		try (Connection conn = getConnection();
-			PreparedStatement pstmt = conn.prepareStatement(query)) {
-
-			pstmt.setString(1, username);
-			rs = pstmt.executeQuery();
+				PreparedStatement pStmt = createGetUserStatement(conn, username);
+				ResultSet rs = pStmt.executeQuery();
+		) {
 			if (rs.next() && passwordCol != null) {
 				pword = rs.getString(passwordCol);
 			}
@@ -189,15 +173,6 @@ public final class JdbcDBUserStorageProvider
 		} catch (Exception e) {
 			logger.error(e);
 		} finally {
-			if (rs != null) {
-				try {
-					rs.close();
-				} catch (SQLException sqlEx) {
-					logger.error(sqlEx.getMessage());
-				} // ignore
-
-				rs = null;
-			}
 		}
 		watch.stop();
 		logger.debug("JdbcDBUserStorageProvider.getUserByUsername used " + watch.getDuration().toNanos() + " nanos.");
@@ -209,6 +184,23 @@ public final class JdbcDBUserStorageProvider
 		return adapter;
 	}
 
+	private PreparedStatement createGetUserStatement(Connection conn, String username) throws Exception {
+		String query = constructQueryUserSQLStr(conn);
+		PreparedStatement pStmt = conn.prepareStatement(query);
+		try {
+			pStmt.setString(1, username);
+			return pStmt;
+		} catch (SQLException ex) {
+			logger.error("SQLState: " + ex.getSQLState() + ", VendorError:" + ex.getErrorCode());
+			logger.error("error in getUserByUsername", ex);
+			throw ex;
+		} catch (Exception e) {
+			logger.error(e);
+			throw e;
+		} finally {
+		}
+	}
+	
 	private Connection getConnection() throws ClassNotFoundException, SQLException {
 		final boolean useConnectionPool = Boolean.parseBoolean(config.getConfig().getFirst(CONFIG_USE_CONNECTION_POOL));
 		
@@ -230,14 +222,49 @@ public final class JdbcDBUserStorageProvider
 		return null;
 	}
 
-	private String constructQueryUserSQLStr() {
+	private String constructQueryUserSQLStr(final Connection conn) {
 		final boolean skipPasswordChecking = Boolean.parseBoolean(config.getConfig().getFirst(CONFIG_SKIP_PASSWORD_CHECKING));
-		return "SELECT ID, " + this.config.getConfig().getFirst(CONFIG_USERNAME_COL)
-				+ (skipPasswordChecking? "" : (", " + this.config.getConfig().getFirst(CONFIG_PASSWORD_COL)))
-				+ " FROM "
-				+ this.config.getConfig().getFirst(CONFIG_TABLE) + " WHERE "
-				+ this.config.getConfig().getFirst(CONFIG_USERNAME_COL) + "=?;"
-				;
+		final String tableName = validateAndQuoteIdentifier(config.getConfig().getFirst(CONFIG_TABLE), "Table name", conn);
+		final String usernameCol = validateAndQuoteIdentifier(config.getConfig().getFirst(CONFIG_USERNAME_COL), "Username column name", conn);
+
+		String passwordCol = null;
+		if (!skipPasswordChecking) {
+			passwordCol = validateAndQuoteIdentifier(config.getConfig().getFirst(CONFIG_PASSWORD_COL), "Password column name", conn);
+		}
+
+		StringBuilder sql = new StringBuilder();
+		sql.append("SELECT ID, ").append(usernameCol);
+		if (passwordCol != null) {
+			sql.append(", ").append(passwordCol);
+		}
+		sql.append(" FROM ").append(tableName).append(" WHERE ").append(usernameCol).append(" = ?;");
+		
+		final String constructedSQL = sql.toString();
+		logger.debug("Constructed SQL query: " + constructedSQL);
+		
+		return constructedSQL;
+	}
+
+	private String validateAndQuoteIdentifier(String value, String label, Connection connection) {
+		if (value == null || value.isEmpty()) {
+			throw new IllegalArgumentException(label + " must not be empty");
+		}
+
+		// Security layer: strict whitelist
+		if (!value.matches("^[a-zA-Z][a-zA-Z0-9_]*$")) {
+			throw new IllegalArgumentException(label + " contains invalid characters: '" + value
+					+ "'. Only letters, digits, and underscores are allowed.");
+		}
+
+		// Compatibility layer: database-specific quoting
+		try {
+			String quote = connection.getMetaData().getIdentifierQuoteString();
+			String closeQuote = quote.equals("[") ? "]" : quote; // SQL Server special case
+			return quote + value + closeQuote;
+		} catch (SQLException e) {
+			// Fallback to standard double quotes if metadata unavailable
+			return "\"" + value + "\"";
+		}
 	}
 	
 	@Override

@@ -5,7 +5,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>hk.newtrek.com</groupId>
 	<artifactId>keycloak-jdbc-user-storage</artifactId>
-	<version>1.0.1</version>
+	<version>1.0.2</version>
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -15,7 +15,7 @@
 		<java.version>21</java.version>
 		<maven.compiler.source>${java.version}</maven.compiler.source>
 		<maven.compiler.target>${java.version}</maven.compiler.target>
-		<keycloak.version>26.1.0</keycloak.version>
+		<keycloak.version>26.1.5</keycloak.version>
 		<spring-security.version>6.4.2</spring-security.version>
 		<mariadb.version>3.5.1</mariadb.version>
 		<mysql.version>9.2.0</mysql.version>

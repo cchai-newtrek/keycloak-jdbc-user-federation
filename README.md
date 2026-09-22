@@ -14,7 +14,7 @@ Project requirement:
 
 - JDK version: 21 (as OpenJDK 17 support is deprecated after Keycloak 25.0.0)
 - Maven 3.8+
-- Keycloak version: 26.1.0
+- Keycloak version: 26.1.0+
 
 ## Deployment Step
 
@@ -38,8 +38,8 @@ After installed the custom jar, go to Keycloak admin page and select User federa
 Add the following properties:
 
 - The database connection URL
-- The table containing the user data (sql server may need to use square bracket, e.g. [user] instead of user)
-- The column name of username
-- The column name of password
+- The table containing the user data (no space, no special character, checking regex is ^[a-zA-Z][a-zA-Z0-9_]*$)
+- The column name of username (no space, no special character, checking regex is ^[a-zA-Z][a-zA-Z0-9_]*$)
+- The column name of password (no space, no special character, checking regex is ^[a-zA-Z][a-zA-Z0-9_]*$)
 
 Save the config.
