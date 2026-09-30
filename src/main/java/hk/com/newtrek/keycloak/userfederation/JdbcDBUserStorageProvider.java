@@ -1,6 +1,11 @@
 package hk.com.newtrek.keycloak.userfederation;
 
-import static hk.com.newtrek.keycloak.userfederation.CustomProperties.*;
+import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_CONNECTION_URL;
+import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_PASSWORD_COL;
+import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_SKIP_PASSWORD_CHECKING;
+import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_TABLE;
+import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_USERNAME_COL;
+import static hk.com.newtrek.keycloak.userfederation.CustomProperties.CONFIG_USE_CONNECTION_POOL;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -251,7 +256,7 @@ public final class JdbcDBUserStorageProvider
 		}
 
 		// Security layer: strict whitelist
-		if (!value.matches("^[a-zA-Z][a-zA-Z0-9_]*$")) {
+		if (!JdbcDBUserStorageProviderFactory.IDENTIFIER_PATTERN.matcher(value).matches()) {
 			throw new IllegalArgumentException(label + " contains invalid characters: '" + value
 					+ "'. Only letters, digits, and underscores are allowed.");
 		}

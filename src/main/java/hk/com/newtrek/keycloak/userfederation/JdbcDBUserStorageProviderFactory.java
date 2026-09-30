@@ -37,7 +37,7 @@ public final class JdbcDBUserStorageProviderFactory implements UserStorageProvid
 	public static final String CONFIG_CONNECTION_POOL_LEAK_DETECTION_THRESHOLD = "connection-pool-leak-detection-threshold";
 	
 	// Regular expression for validating table and column names: alphanumeric and underscores only
-	private static final Pattern IDENTIFIER_PATTERN = Pattern.compile("^[a-zA-Z0-9_]+$");
+	public static final Pattern IDENTIFIER_PATTERN = Pattern.compile("^[a-zA-Z][a-zA-Z0-9_]*$");
 
 	static {
 		configMetadata = ProviderConfigurationBuilder.create()
@@ -147,7 +147,8 @@ public final class JdbcDBUserStorageProviderFactory implements UserStorageProvid
 		try {
 			Class.forName(dbType.getJdbcDriver().getCanonicalName());
 		} catch (Exception e) {
-			 logger.error(e.getMessage());
+			logger.error(e.getMessage());
+			throw new ComponentValidationException(e.getMessage());
 		}
 		
 		boolean isValid = false;
@@ -208,7 +209,8 @@ public final class JdbcDBUserStorageProviderFactory implements UserStorageProvid
 		hikariConfig.setLeakDetectionThreshold(Long.parseLong(config.getConfig().getFirst(CONFIG_CONNECTION_POOL_LEAK_DETECTION_THRESHOLD)));
 
 		// Additional HikariCP settings (optional, but recommended)
-		hikariConfig.setPoolName(config.getConfig().getFirst(CONFIG_CONNECTION_POOL_NAME)); // Give your pool a name
+		final String poolName = StringUtils.stripToEmpty(config.getConfig().getFirst(CONFIG_CONNECTION_POOL_NAME)).trim();
+		hikariConfig.setPoolName(poolName); // Give your pool a name
 		hikariConfig.setAutoCommit(false); // set auto commit to true may not be a good idea
 		hikariConfig.setConnectionTestQuery(dbType.getTestSql()); // Test connection on borrow
 
@@ -231,7 +233,5 @@ public final class JdbcDBUserStorageProviderFactory implements UserStorageProvid
 		UserStorageProviderFactory.super.close();
 		closeDataSource();
 	}
-	
-	
 
 }
